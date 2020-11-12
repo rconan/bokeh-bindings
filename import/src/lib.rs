@@ -86,12 +86,6 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
         use serde_json::Value;
         use uuid::Uuid;
 
-        pub trait BokehModel {}
-        impl std::fmt::Debug for BokehModel {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f,"Bokek Model Instance")
-            }
-        }
         #(
             #[doc = #model_attr_doc]
             #[skip_serializing_none]
@@ -119,7 +113,6 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
                 /// Model attributes
                 pub attributes: #model_name_attr
                 }
-            impl BokehModel for #model_name {}
             impl Default for #model_name {
                 fn default() -> Self {
                     Self {
