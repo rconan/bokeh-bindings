@@ -81,7 +81,11 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
     */
     // Generate code
     let gen = quote! {
+        use serde::{Deserialize, Serialize};
+        use serde_with::skip_serializing_none;
         use serde_json::Value;
+        use uuid::Uuid;
+
         pub trait BokehModel {}
         impl std::fmt::Debug for BokehModel {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -90,7 +94,8 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
         }
         #(
             #[doc = #model_attr_doc]
-            #[derive(Debug)]
+            #[skip_serializing_none]
+            #[derive(Debug,Serialize)]
             pub struct #model_name_attr {
                 #(
                     #[doc =  #model_field_doc]
@@ -105,7 +110,7 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
             )*
         #(
             #[doc =  #model_doc]
-            #[derive(Debug)]
+            #[derive(Debug,Serialize)]
             pub struct #model_name {
                 /// Model name
                 pub r#type: String,
@@ -119,7 +124,9 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
                 fn default() -> Self {
                     Self {
                         r#type: #model_name_str.to_string(),
-                        id: String::new(),
+                        id: String::from(Uuid::new_v4()
+                                         .to_simple()
+                                         .encode_lower(&mut Uuid::encode_buffer())),
                         attributes: #model_name_attr::default()
                     }
                 }
