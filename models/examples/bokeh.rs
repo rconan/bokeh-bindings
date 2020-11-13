@@ -1,8 +1,4 @@
 use models::*;
-use serde::{Deserialize, Serialize};
-use serde_json;
-use serde_json::{json, to_value, Value};
-use std::boxed::Box;
 
 /*
 #[derive(Bokeh)]
@@ -17,6 +13,7 @@ struct PlotXY<T: Clone> {
  */
 
 fn main() {
+    /*
     let bare_plot = r#"{
   "roots": {
     "references": [
@@ -252,7 +249,7 @@ fn main() {
   "title": "Bokeh Application",
   "version": "2.3.0dev5-6-g8c193aa5b"
 }"#;
-
+*/
     let x_tick = BasicTicker::new();
     let x_tick_format = BasicTickFormatter::new();
     let mut x_axis = LinearAxis::new();

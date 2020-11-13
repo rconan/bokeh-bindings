@@ -130,15 +130,15 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
                 self.references.push(serde_json::to_value(model_boxed).unwrap());
                 self
             }
-            /// Serialize document to serde_json::Value
+            /// Serialize document to `serde_json::Value`
             pub fn to_value(&mut self) -> serde_json::Value {
                 serde_json::json!({"roots": {"references":self.references , "root_ids": [new_uuid()]} , "title": self.title, "version": self.version })
             }
-            /// Serialize document to json string
+            /// Serialize document to a JSON `String`
             pub fn to_json(&mut self) -> serde_json::Result<String> {
                 serde_json::to_string(&self.to_value())
             }
-            /// Serialize document to pretty-printed json string
+            /// Serialize document to pretty-printed JSON `String`
             pub fn to_json_pretty(&mut self) -> serde_json::Result<String> {
                 serde_json::to_string_pretty(&self.to_value())
             }
