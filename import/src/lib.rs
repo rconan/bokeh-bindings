@@ -1,5 +1,5 @@
-extern crate proc_macro;
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro;
+use proc_macro2::{Ident, Span};
 use quote::quote;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -65,21 +65,8 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
         .clone()
         .map(|x| x.map(|p| p.desc).collect())
         .collect();
-    // Check properties for Instance types
-    let model_field_type: Vec<Vec<TokenStream>> = model_field_iter
-        .clone()
-        .map(|x| {
-            x.map(|p| {
-                if p.r#type.starts_with("Instance") {
-                    quote! {Option<std::boxed::Box<BokehModel>>}
-                } else {
-                    quote! {Option<Value>}
-                }
-            })
-            .collect()
-        })
-        .collect();
     // Build a list of all Bokeh types
+    /*
     let mut field_types: Vec<String> = bokeh_models
         .values()
         .flat_map(|m| {
@@ -91,7 +78,8 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
         .collect();
     field_types.sort();
     field_types.dedup();
-    //println!("{:#?}", field_types);
+    println!("{:#?}", field_types);
+    */
     // Generate code
     println!(" - Writing the models");
     let gen = quote! {
@@ -102,21 +90,33 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
         use erased_serde;
         use erased_serde::serialize_trait_object;
 
+        /// Set the model unique identifier
         pub fn new_uuid() -> String {
             String::from(Uuid::new_v4()
                          .to_simple()
                          .encode_lower(&mut Uuid::encode_buffer()))
         }
+        /// Set model attributes value
         pub fn set_value<T: Clone+Serialize>(litteral: T) -> Option<serde_json::Value> {
             Some(serde_json::json!(litteral))
         }
-        pub trait BokehModel: erased_serde::Serialize {}
+        /// Trait implemented by all Bokeh models
+        pub trait BokehModel: erased_serde::Serialize {
+            fn get_id(&self) -> Option<serde_json::Value>;
+        }
+        /// Get ids from a vector of Bokeh models
+        pub fn get_ids(models: Vec<&dyn BokehModel>) -> Option<serde_json::Value> {
+            let ids: Vec<serde_json::Value> = models.iter().map(|x| x.get_id().unwrap()).collect();
+            Some(serde_json::json!(ids))
+        }
+        /// The document that holds all Bokeh models together
         pub struct Document {
             pub references: Vec<serde_json::Value>,
             pub title: String,
             pub version: String,
         }
         impl Document {
+            /// New document
             pub fn new() -> Self {
                 Self {
                     references: vec![],
@@ -124,27 +124,33 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
                     version: "xxx".to_owned(),
                 }
             }
+            /// Add a Bokeh model to the document
             pub fn add(&mut self, model: impl BokehModel) -> &mut Self {
                 let model_boxed: std::boxed::Box<dyn BokehModel> = std::boxed::Box::new(model);
                 self.references.push(serde_json::to_value(model_boxed).unwrap());
                 self
             }
+            /// Serialize document to serde_json::Value
             pub fn to_value(&mut self) -> serde_json::Value {
                 serde_json::json!({"roots": {"references":self.references , "root_ids": [new_uuid()]} , "title": self.title, "version": self.version })
             }
+            /// Serialize document to json string
             pub fn to_json(&mut self) -> serde_json::Result<String> {
                 serde_json::to_string(&self.to_value())
             }
+            /// Serialize document to pretty-printed json string
             pub fn to_json_pretty(&mut self) -> serde_json::Result<String> {
                 serde_json::to_string_pretty(&self.to_value())
             }
         }
+        /// macro to facilitate adding models to a document
         #[macro_export]
         macro_rules! doc_add {
             ($doc:expr,$($name:expr),+) => {
                 $($doc.add($name);)+
             };
         }
+        // Bokeh models generation
         #(
             #[doc = #model_attr_doc]
             #[skip_serializing_none]
@@ -172,7 +178,6 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
                 /// Model attributes
                 pub attributes: #model_name_attr
             }
-            impl BokehModel for #model_name {}
             impl Default for #model_name {
                 fn default() -> Self {
                     Self {
@@ -189,7 +194,9 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
                         ..Self::default()
                     }
                 }
-                pub fn get_id(&self) -> Option<serde_json::Value> {
+            }
+            impl BokehModel for #model_name {
+                fn get_id(&self) -> Option<serde_json::Value> {
                     Some(serde_json::json!({"id":self.id}))
                 }
             }

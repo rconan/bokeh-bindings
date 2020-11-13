@@ -275,9 +275,9 @@ fn main() {
     let title = Title::new();
 
     let mut plot = Plot::new();
-    plot.attributes.below = Some(json!([x_axis.get_id().unwrap()]));
-    plot.attributes.left = Some(json!([y_axis.get_id().unwrap()]));
-    plot.attributes.center = Some(json!([x_grid.get_id().unwrap(), y_grid.get_id().unwrap()]));
+    plot.attributes.below = get_ids(vec![&x_axis]);
+    plot.attributes.left = get_ids(vec![&y_axis]);
+    plot.attributes.center = get_ids(vec![&x_grid,&y_grid]);
     plot.attributes.x_range = x_range.get_id();
     plot.attributes.x_scale = x_scale.get_id();
     plot.attributes.y_range = y_range.get_id();
