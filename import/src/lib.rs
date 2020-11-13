@@ -1,5 +1,5 @@
 extern crate proc_macro;
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -24,11 +24,13 @@ struct Model {
 #[proc_macro_derive(Bokeh)]
 pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let bokeh_models = include_str!("specs.json");
-    let bokeh_models: HashMap<String, Model> = serde_json::from_str(bokeh_models).unwrap();
+    let bokeh_models: HashMap<String, Model> =
+        serde_json::from_str(bokeh_models).expect("Bokeh specs error");
 
     // Get Bokeh model names
     // - as vector of `String`
     let model_name_str: Vec<String> = bokeh_models.keys().cloned().collect();
+    println!(" - Processing {} Bokeh models", model_name_str.len());
     // - as vector of `Ident`
     let model_name: Vec<Ident> = bokeh_models
         .keys()
@@ -48,24 +50,36 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
     // Get Bokeh model docs
     let model_doc: Vec<String> = bokeh_models.values().cloned().map(|m| m.desc).collect();
     // Get Bokeh model properties name
-    let model_field_name: Vec<Vec<Ident>> = bokeh_models
-        .values()
-        .map(|m| {
-            m.props
-                .iter()
-                .map(|p| &p.name)
-                .filter(|x| x.as_str() != "name")
-                .map(|p| Ident::new(&p, Span::call_site()))
-                .collect()
-        })
+    let model_field_iter = bokeh_models.values().map(|m| {
+        m.props
+            .iter()
+            .filter(|x| x.name.as_str() != "name")
+            .cloned()
+    });
+    let model_field_name: Vec<Vec<Ident>> = model_field_iter
+        .clone()
+        .map(|x| x.map(|p| Ident::new(&p.name, Span::call_site())).collect())
         .collect();
     // Get Bokeh model properties doc
-    let model_field_doc: Vec<Vec<String>> = bokeh_models
-        .values()
-        .map(|m| m.props.iter().cloned().map(|p| p.desc).collect())
+    let model_field_doc: Vec<Vec<String>> = model_field_iter
+        .clone()
+        .map(|x| x.map(|p| p.desc).collect())
+        .collect();
+    // Check properties for Instance types
+    let model_field_type: Vec<Vec<TokenStream>> = model_field_iter
+        .clone()
+        .map(|x| {
+            x.map(|p| {
+                if p.r#type.starts_with("Instance") {
+                    quote! {Option<std::boxed::Box<BokehModel>>}
+                } else {
+                    quote! {Option<Value>}
+                }
+            })
+            .collect()
+        })
         .collect();
     // Build a list of all Bokeh types
-    /*
     let mut field_types: Vec<String> = bokeh_models
         .values()
         .flat_map(|m| {
@@ -77,23 +91,68 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
         .collect();
     field_types.sort();
     field_types.dedup();
-    println!("{:#?}", field_types);
-    */
+    //println!("{:#?}", field_types);
     // Generate code
+    println!(" - Writing the models");
     let gen = quote! {
         use serde::{Deserialize, Serialize};
         use serde_with::skip_serializing_none;
         use serde_json::Value;
         use uuid::Uuid;
+        use erased_serde;
+        use erased_serde::serialize_trait_object;
 
+        pub fn new_uuid() -> String {
+            String::from(Uuid::new_v4()
+                         .to_simple()
+                         .encode_lower(&mut Uuid::encode_buffer()))
+        }
+        pub fn set_value<T: Clone+Serialize>(litteral: T) -> Option<serde_json::Value> {
+            Some(serde_json::json!(litteral))
+        }
+        pub trait BokehModel: erased_serde::Serialize {}
+        pub struct Document {
+            pub references: Vec<serde_json::Value>,
+            pub title: String,
+            pub version: String,
+        }
+        impl Document {
+            pub fn new() -> Self {
+                Self {
+                    references: vec![],
+                    title: "Bokeh Application".to_owned(),
+                    version: "xxx".to_owned(),
+                }
+            }
+            pub fn add(&mut self, model: impl BokehModel) -> &mut Self {
+                let model_boxed: std::boxed::Box<dyn BokehModel> = std::boxed::Box::new(model);
+                self.references.push(serde_json::to_value(model_boxed).unwrap());
+                self
+            }
+            pub fn to_value(&mut self) -> serde_json::Value {
+                serde_json::json!({"roots": {"references":self.references , "root_ids": [new_uuid()]} , "title": self.title, "version": self.version })
+            }
+            pub fn to_json(&mut self) -> serde_json::Result<String> {
+                serde_json::to_string(&self.to_value())
+            }
+            pub fn to_json_pretty(&mut self) -> serde_json::Result<String> {
+                serde_json::to_string_pretty(&self.to_value())
+            }
+        }
+        #[macro_export]
+        macro_rules! doc_add {
+            ($doc:expr,$($name:expr),+) => {
+                $($doc.add($name);)+
+            };
+        }
         #(
             #[doc = #model_attr_doc]
             #[skip_serializing_none]
-            #[derive(Debug,Serialize)]
+            #[derive(Serialize)]
             pub struct #model_name_attr {
                 #(
                     #[doc =  #model_field_doc]
-                    pub #model_field_name: Option<Value>
+                    pub #model_field_name: Option<serde_json::Value>
                 ),*}
             impl Default for #model_name_attr {
                 fn default() -> Self {
@@ -101,10 +160,10 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
                         #(#model_field_name: None),* }
                 }
             }
-            )*
+        )*
         #(
             #[doc =  #model_doc]
-            #[derive(Debug,Serialize)]
+            #[derive(Serialize)]
             pub struct #model_name {
                 /// Model name
                 pub r#type: String,
@@ -112,19 +171,30 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
                 pub id: String,
                 /// Model attributes
                 pub attributes: #model_name_attr
-                }
+            }
+            impl BokehModel for #model_name {}
             impl Default for #model_name {
                 fn default() -> Self {
                     Self {
                         r#type: #model_name_str.to_string(),
-                        id: String::from(Uuid::new_v4()
-                                         .to_simple()
-                                         .encode_lower(&mut Uuid::encode_buffer())),
+                        id: String::new(),
                         attributes: #model_name_attr::default()
                     }
                 }
             }
+            impl #model_name {
+                pub fn new() -> Self {
+                    Self {
+                        id: new_uuid(),
+                        ..Self::default()
+                    }
+                }
+                pub fn get_id(&self) -> Option<serde_json::Value> {
+                    Some(serde_json::json!({"id":self.id}))
+                }
+            }
         )*
+        serialize_trait_object!(BokehModel);
     };
     gen.into()
 }
