@@ -83,6 +83,44 @@ fn main() {
         &reset_tool,
     ]);
 
+    let selection = Selection::new();
+    let union_renderers = UnionRenderers::new();
+    let mut column_data_source = ColumnDataSource::new();
+    column_data_source.attributes.data = Some(serde_json::json!({"x":vec![1,2,3],"y":vec![4,5,6]}));
+    column_data_source.attributes.selected = selection.get_id();
+    column_data_source.attributes.selection_policy = union_renderers.get_id();
+    let mut cds_view = CDSView::new();
+    cds_view.attributes.source = column_data_source.get_id();
+    let mut circle = Circle::new();
+    circle.attributes = serde_json::from_str(
+        r###"{
+            "fill_alpha": {
+              "value": 0.1
+            },
+            "fill_color": {
+              "value": "#1f77b4"
+            },
+            "line_alpha": {
+              "value": 0.1
+            },
+            "line_color": {
+              "value": "#1f77b4"
+            },
+            "x": {
+              "field": "x"
+            },
+            "y": {
+              "field": "y"
+            }
+}"###,
+    )
+    .unwrap();
+    let mut glyph_renderer = GlyphRenderer::new();
+    glyph_renderer.attributes.data_source = column_data_source.get_id();
+    glyph_renderer.attributes.glyph = circle.get_id();
+    glyph_renderer.attributes.nonselection_glyph = circle.get_id();
+    glyph_renderer.attributes.view = cds_view.get_id();
+
     let mut plot = Plot::new();
     plot.attributes.below = get_ids(vec![&x_axis]);
     plot.attributes.left = get_ids(vec![&y_axis]);
@@ -93,6 +131,7 @@ fn main() {
     plot.attributes.y_scale = y_scale.get_id();
     plot.attributes.title = title.get_id();
     plot.attributes.toolbar = toolbar.get_id();
+    plot.attributes.renderers = get_ids(vec![&glyph_renderer]);
 
     let mut doc = Document::from_root(&plot);
     doc_add!(
@@ -118,6 +157,12 @@ fn main() {
         save_tool,
         reset_tool,
         toolbar,
+        selection,
+        union_renderers,
+        column_data_source,
+        cds_view,
+        circle,
+        glyph_renderer,
         plot
     );
     let s = doc.to_json_pretty().unwrap();
@@ -125,5 +170,5 @@ fn main() {
 
     let mut html = HTML::default();
     html.render(&doc).to_file().unwrap();
-    println!("{}", html.template)
+    //println!("{}", html.template)
 }

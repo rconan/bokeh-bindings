@@ -1,5 +1,6 @@
 use std::io::Write;
 use tempfile::tempfile;
+use std::fs::File;
 
 pub mod bokeh_models {
     //!
@@ -135,6 +136,12 @@ impl HTML {
     }
     // Write the html template to file
     pub fn to_file(&self) -> std::io::Result<()> {
+        let mut file = File::create("/tmp/output.html")?;
+        file.write_all(self.template.as_bytes())?;
+        Ok(())
+    }
+    // Open the html file on the browser
+    pub fn show(&self) -> std::io::Result<()> {
         let mut file = tempfile()?;
         file.write_all(self.template.as_bytes())?;
         Ok(())
