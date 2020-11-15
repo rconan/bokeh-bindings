@@ -83,125 +83,93 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
     // Generate code
     println!(" - Writing the models");
     let gen = quote! {
-        use serde::{Deserialize, Serialize};
-        use serde_with::skip_serializing_none;
-        use serde_json::Value;
-        use uuid::Uuid;
-        use erased_serde;
-        use erased_serde::serialize_trait_object;
+            use serde::{Deserialize, Serialize};
+            use serde_with::skip_serializing_none;
+            use serde_json::Value;
+            use uuid::Uuid;
+            use erased_serde;
+            use erased_serde::serialize_trait_object;
 
-        /// Set the model unique identifier
-        pub fn new_uuid() -> String {
-            String::from(Uuid::new_v4()
-                         .to_simple()
-                         .encode_lower(&mut Uuid::encode_buffer()))
-        }
-        /// Set model attributes value
-        pub fn set_value<T: Clone+Serialize>(litteral: T) -> Option<serde_json::Value> {
-            Some(serde_json::json!(litteral))
-        }
-        /// Trait implemented by all Bokeh models
-        pub trait BokehModel: erased_serde::Serialize {
-            fn get_id(&self) -> Option<serde_json::Value>;
-        }
-        /// Get ids from a vector of Bokeh models
-        pub fn get_ids(models: Vec<&dyn BokehModel>) -> Option<serde_json::Value> {
-            let ids: Vec<serde_json::Value> = models.iter().map(|x| x.get_id().unwrap()).collect();
-            Some(serde_json::json!(ids))
-        }
-        /// The document that holds all Bokeh models together
-        pub struct Document {
-            pub references: Vec<serde_json::Value>,
-            pub title: String,
-            pub version: String,
-        }
-        impl Document {
-            /// New document
-            pub fn new() -> Self {
-                Self {
-                    references: vec![],
-                    title: "Bokeh Application".to_owned(),
-                    version: "xxx".to_owned(),
-                }
+            /// Set the model unique identifier
+            pub fn new_uuid() -> String {
+                String::from(Uuid::new_v4()
+                             .to_simple()
+                             .encode_lower(&mut Uuid::encode_buffer()))
             }
-            /// Add a Bokeh model to the document
-            pub fn add(&mut self, model: impl BokehModel) -> &mut Self {
-                let model_boxed: std::boxed::Box<dyn BokehModel> = std::boxed::Box::new(model);
-                self.references.push(serde_json::to_value(model_boxed).unwrap());
-                self
+            /// Set model attributes value
+            pub fn set_value<T: Clone+Serialize>(litteral: T) -> Option<serde_json::Value> {
+                Some(serde_json::json!(litteral))
             }
-            /// Serialize document to `serde_json::Value`
-            pub fn to_value(&mut self) -> serde_json::Value {
-                serde_json::json!({"roots": {"references":self.references , "root_ids": [new_uuid()]} , "title": self.title, "version": self.version })
+            /// Trait implemented by all Bokeh models
+            pub trait BokehModel: erased_serde::Serialize {
+                fn get_id(&self) -> Option<serde_json::Value>;
+                fn get_raw_id(&self) -> String;
             }
-            /// Serialize document to a JSON `String`
-            pub fn to_json(&mut self) -> serde_json::Result<String> {
-                serde_json::to_string(&self.to_value())
+            /// Get ids from a vector of Bokeh models
+            pub fn get_ids(models: Vec<&dyn BokehModel>) -> Option<serde_json::Value> {
+                let ids: Vec<serde_json::Value> = models.iter().map(|x| x.get_id().unwrap()).collect();
+                Some(serde_json::json!(ids))
             }
-            /// Serialize document to pretty-printed JSON `String`
-            pub fn to_json_pretty(&mut self) -> serde_json::Result<String> {
-                serde_json::to_string_pretty(&self.to_value())
-            }
-        }
-        /// macro to facilitate adding models to a document
-        #[macro_export]
-        macro_rules! doc_add {
-            ($doc:expr,$($name:expr),+) => {
-                $($doc.add($name);)+
-            };
-        }
-        // Bokeh models generation
-        #(
-            #[doc = #model_attr_doc]
-            #[skip_serializing_none]
-            #[derive(Serialize)]
-            pub struct #model_name_attr {
-                #(
-                    #[doc =  #model_field_doc]
-                    pub #model_field_name: Option<serde_json::Value>
-                ),*}
-            impl Default for #model_name_attr {
-                fn default() -> Self {
-                    Self {
-                        #(#model_field_name: None),* }
-                }
-            }
-        )*
-        #(
-            #[doc =  #model_doc]
-            #[derive(Serialize)]
-            pub struct #model_name {
-                /// Model name
-                pub r#type: String,
-                /// Model UUID
-                pub id: String,
-                /// Model attributes
-                pub attributes: #model_name_attr
-            }
-            impl Default for #model_name {
-                fn default() -> Self {
-                    Self {
-                        r#type: #model_name_str.to_string(),
-                        id: String::new(),
-                        attributes: #model_name_attr::default()
+            // Bokeh models generation
+            #(
+                #[doc = #model_attr_doc]
+                #[skip_serializing_none]
+                #[derive(Serialize,Deserialize)]
+                pub struct #model_name_attr {
+                    pub plot: Option<serde_json::Value>,
+                    #(
+                        #[doc =  #model_field_doc]
+                        pub #model_field_name: Option<serde_json::Value>
+                    ),*}
+                impl Default for #model_name_attr {
+                    fn default() -> Self {
+                        Self {
+                            plot: None,
+                            #(#model_field_name: None),* }
                     }
                 }
-            }
-            impl #model_name {
-                pub fn new() -> Self {
-                    Self {
-                        id: new_uuid(),
-                        ..Self::default()
+            )*
+            #(
+                #[doc =  #model_doc]
+                #[derive(Serialize,Deserialize)]
+                pub struct #model_name {
+                    /// Model name
+                    pub r#type: String,
+                    /// Model UUID
+                    pub id: String,
+                    /// Model attributes
+                    pub attributes: #model_name_attr
+                }
+                impl Default for #model_name {
+                    fn default() -> Self {
+                        Self {
+                            r#type: #model_name_str.to_string(),
+                            id: String::new(),
+                            attributes: #model_name_attr::default()
+                        }
                     }
                 }
-            }
-            impl BokehModel for #model_name {
-                fn get_id(&self) -> Option<serde_json::Value> {
-                    Some(serde_json::json!({"id":self.id}))
+                impl #model_name {
+                    pub fn new() -> Self {
+                        Self {
+                            id: new_uuid(),
+                            ..Self::default()
+                        }
+                    }
+                    pub fn as_model(&self) -> &dyn BokehModel {
+                        self
+                    }
                 }
-            }
-        )*
-        serialize_trait_object!(BokehModel);
-    };
+                impl BokehModel for #model_name {
+                    fn get_id(&self) -> Option<serde_json::Value> {
+                        Some(serde_json::json!({"id":self.id}))
+                    }
+                    fn get_raw_id(&self) -> String {
+                        self.id.clone()
+                    }
+                }
+            )*
+            serialize_trait_object!(BokehModel);
+        };
     gen.into()
 }
