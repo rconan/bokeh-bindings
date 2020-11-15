@@ -1,6 +1,5 @@
-use std::fs::File;
 use std::io::Write;
-use serde_json::Value;
+use tempfile::tempfile;
 
 pub mod bokeh_models {
     //!
@@ -13,13 +12,6 @@ pub mod bokeh_models {
 }
 #[doc(inline)]
 pub use self::bokeh_models::*;
-
-impl<'a> From<&'a dyn BokehModel> for Option<Value> {
-    fn from(item: &dyn BokehModel) -> Self {
-        item.get_id()
-    }
-}
-
 
 /// macro to facilitate adding models to a document
 #[macro_export]
@@ -142,8 +134,9 @@ impl HTML {
         self
     }
     // Write the html template to file
-    pub fn to_file(&self) {
-        let mut file = File::create("output.html").unwrap();
-        file.write_all(self.template.as_bytes()).unwrap();
+    pub fn to_file(&self) -> std::io::Result<()> {
+        let mut file = tempfile()?;
+        file.write_all(self.template.as_bytes())?;
+        Ok(())
     }
 }

@@ -156,9 +156,6 @@ pub fn import_bokeh_models(_input: proc_macro::TokenStream) -> proc_macro::Token
                             ..Self::default()
                         }
                     }
-                    pub fn as_model(&self) -> &dyn BokehModel {
-                        self
-                    }
                 }
                 impl BokehModel for #model_name {
                     fn get_id(&self) -> Option<serde_json::Value> {
