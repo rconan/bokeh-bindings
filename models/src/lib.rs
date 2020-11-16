@@ -1,6 +1,6 @@
+use std::fs::File;
 use std::io::Write;
 use tempfile::tempfile;
-use std::fs::File;
 
 pub mod bokeh_models {
     //!
@@ -63,6 +63,7 @@ impl Document {
 /// The HTML file that renders Bokeh plots
 pub struct HTML {
     pub template: String,
+    file: File,
 }
 impl Default for HTML {
     fn default() -> Self {
@@ -119,31 +120,38 @@ impl Default for HTML {
     </body>
 </html>
 "#.to_string(),
+            file: tempfile().expect("Temporary file creation failed!"),
             }
     }
 }
 impl HTML {
+    pub fn set_file(self, filepath: &str) -> std::io::Result<Self> {
+        Ok(Self {
+            file: File::create(filepath)?,
+            ..self
+        })
+    }
     // File the html template with the information from the `Document`
-    pub fn render(&mut self, doc: &Document) -> &Self {
-        self.template = self
-            .template
-            .replace("->BOKEH_ROOT_ID<-", &new_uuid())
-            .replace("->APP_JSON_ID<-", &new_uuid())
-            .replace("->DOCUMENT_ID<-", &new_uuid())
-            .replace("->ROOT_ID<-", &doc.root_ids)
-            .replace("==>>BOKEH_JSON<<==", doc.to_json().unwrap().as_str());
-        self
+    pub fn render(self, doc: &Document) -> Self {
+        Self {
+            template: self
+                .template
+                .replace("->BOKEH_ROOT_ID<-", &new_uuid())
+                .replace("->APP_JSON_ID<-", &new_uuid())
+                .replace("->DOCUMENT_ID<-", &new_uuid())
+                .replace("->ROOT_ID<-", &doc.root_ids)
+                .replace("==>>BOKEH_JSON<<==", doc.to_json().unwrap().as_str()),
+            ..self
+        }
     }
     // Write the html template to file
-    pub fn to_file(&self) -> std::io::Result<()> {
-        let mut file = File::create("/tmp/output.html")?;
-        file.write_all(self.template.as_bytes())?;
+    pub fn to_file(mut self) -> std::io::Result<()> {
+        self.file.write_all(self.template.as_bytes())?;
         Ok(())
     }
     // Open the html file on the browser
-    pub fn show(&self) -> std::io::Result<()> {
-        let mut file = tempfile()?;
-        file.write_all(self.template.as_bytes())?;
+    pub fn show(doc: &Document) -> std::io::Result<()> {
+        Self::default().render(doc).to_file()?;
         Ok(())
     }
 }

@@ -13,7 +13,7 @@ struct PlotXY<T: Clone> {
 }
  */
 
-fn main() {
+fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let x_tick = BasicTicker::new();
     let x_tick_format = BasicTickFormatter::new();
     let mut x_axis = LinearAxis::new();
@@ -168,7 +168,10 @@ fn main() {
     let s = doc.to_json_pretty().unwrap();
     println!("{}", s);
 
-    let mut html = HTML::default();
-    html.render(&doc).to_file().unwrap();
+    let _html = HTML::default()
+        .set_file("/tmp/output.html")?
+        .render(&doc)
+        .to_file()?;
     //println!("{}", html.template)
+    Ok(())
 }
