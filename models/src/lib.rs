@@ -1,6 +1,8 @@
+use open;
 use std::fs::File;
 use std::io::Write;
-use tempfile::tempfile;
+use std::path::Path;
+use tempfile;
 
 pub mod bokeh_models {
     //!
@@ -11,8 +13,7 @@ pub mod bokeh_models {
     #[derive(Bokeh)]
     struct _BokehStructs;
 }
-#[doc(inline)]
-pub use self::bokeh_models::*;
+use self::bokeh_models::{new_uuid, BokehModel};
 
 /// macro to facilitate adding models to a document
 #[macro_export]
@@ -27,6 +28,7 @@ pub struct Document {
     pub references: Vec<serde_json::Value>,
     pub title: String,
     pub version: String,
+    pub id: String,
     pub root_ids: String,
 }
 impl Document {
@@ -36,6 +38,7 @@ impl Document {
             references: vec![],
             title: "Bokeh Application".to_owned(),
             version: "2.3.0dev5-6-g8c193aa5b-dirty".to_owned(), // from: git describe --tags --dirty --alway
+            id: new_uuid(),
             root_ids: root_model.get_raw_id(),
         }
     }
@@ -58,12 +61,41 @@ impl Document {
     pub fn to_json_pretty(&self) -> serde_json::Result<String> {
         serde_json::to_string_pretty(&self.to_value())
     }
+    // Open the html file on the browser
+    pub fn show(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+        let named_tempfile = tempfile::Builder::new()
+            .prefix(&format!("bokeh_doc{}", self.id))
+            .suffix(".html")
+            .rand_bytes(5)
+            .tempfile()?;
+        let path = named_tempfile.path();
+        HTML::default().render(self).to_file(path)?;
+        match open::that(path) {
+            Ok(exit_status) => {
+                if exit_status.success() {
+                    println!("Look at your browser!");
+                } else {
+                    if let Some(code) = exit_status.code() {
+                        println!("Command returned non-zero exit status {}!", code);
+                    } else {
+                        println!("Command returned with unknown exit status!");
+                    }
+                }
+            }
+            Err(why) => println!("Failure to execute command: {}", why),
+        }
+        println!("Press any key to exit!");
+        let mut line = String::new();
+        std::io::stdin()
+            .read_line(&mut line)
+            .expect("Failed to read line");
+        Ok(())
+    }
 }
 
 /// The HTML file that renders Bokeh plots
 pub struct HTML {
     pub template: String,
-    file: File,
 }
 impl Default for HTML {
     fn default() -> Self {
@@ -120,17 +152,10 @@ impl Default for HTML {
     </body>
 </html>
 "#.to_string(),
-            file: tempfile().expect("Temporary file creation failed!"),
             }
     }
 }
 impl HTML {
-    pub fn set_file(self, filepath: &str) -> std::io::Result<Self> {
-        Ok(Self {
-            file: File::create(filepath)?,
-            ..self
-        })
-    }
     // File the html template with the information from the `Document`
     pub fn render(self, doc: &Document) -> Self {
         Self {
@@ -138,20 +163,16 @@ impl HTML {
                 .template
                 .replace("->BOKEH_ROOT_ID<-", &new_uuid())
                 .replace("->APP_JSON_ID<-", &new_uuid())
-                .replace("->DOCUMENT_ID<-", &new_uuid())
+                .replace("->DOCUMENT_ID<-", &doc.id)
                 .replace("->ROOT_ID<-", &doc.root_ids)
                 .replace("==>>BOKEH_JSON<<==", doc.to_json().unwrap().as_str()),
             ..self
         }
     }
     // Write the html template to file
-    pub fn to_file(mut self) -> std::io::Result<()> {
-        self.file.write_all(self.template.as_bytes())?;
-        Ok(())
-    }
-    // Open the html file on the browser
-    pub fn show(doc: &Document) -> std::io::Result<()> {
-        Self::default().render(doc).to_file()?;
+    pub fn to_file<P: AsRef<Path>>(self, filepath: P) -> std::io::Result<()> {
+        let mut file = File::create(filepath)?;
+        file.write_all(self.template.as_bytes())?;
         Ok(())
     }
 }

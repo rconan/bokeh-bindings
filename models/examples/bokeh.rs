@@ -1,4 +1,4 @@
-use models::*;
+use models::{bokeh_models::*, doc_add, Document};
 use serde_json;
 
 /*
@@ -94,24 +94,18 @@ fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut circle = Circle::new();
     circle.attributes = serde_json::from_str(
         r###"{
-            "fill_alpha": {
-              "value": 0.1
-            },
-            "fill_color": {
-              "value": "#1f77b4"
-            },
-            "line_alpha": {
-              "value": 0.1
-            },
-            "line_color": {
-              "value": "#1f77b4"
-            },
+            "fill_alpha": 0.2,
+            "fill_color": "red",
+            "line_alpha": 1,
+            "line_color": "blue",
+            "line_width": 4,
             "x": {
               "field": "x"
             },
             "y": {
               "field": "y"
-            }
+            },
+            "radius": 0.05
 }"###,
     )
     .unwrap();
@@ -168,10 +162,9 @@ fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let s = doc.to_json_pretty().unwrap();
     println!("{}", s);
 
-    let _html = HTML::default()
-        .set_file("/tmp/output.html")?
+    /*let _html = HTML::default()
         .render(&doc)
-        .to_file()?;
-    //println!("{}", html.template)
+    .to_file("/tmp/output.html")?;*/
+    doc.show()?;
     Ok(())
 }
